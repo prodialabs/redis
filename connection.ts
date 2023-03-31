@@ -157,7 +157,7 @@ export class RedisConnection implements Connection {
   async #connect(retryCount: number) {
     try {
       const dialOpts = {
-        ...(this.options?.tlsOptions || {}),
+        ...(this.options.tlsOptions || {}),
         hostname: this.hostname,
         port: parsePortLike(this.port),
       };
