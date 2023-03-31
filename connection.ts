@@ -23,6 +23,7 @@ export interface Connection {
 }
 
 export interface RedisConnectionOptions {
+  tlsOptions?: Partial<Deno.ConnectTlsOptions>;
   tls?: boolean;
   db?: number;
   password?: string;
@@ -65,7 +66,7 @@ export class RedisConnection implements Connection {
   constructor(
     hostname: string,
     port: number | string,
-    private options: RedisConnectionOptions,
+    private options: RedisConnectionOptions
   ) {
     this.hostname = hostname;
     this.port = port;
@@ -80,7 +81,7 @@ export class RedisConnection implements Connection {
 
   private async authenticate(
     username: string | undefined,
-    password: string,
+    password: string
   ): Promise<void> {
     try {
       password && username
@@ -98,7 +99,7 @@ export class RedisConnection implements Connection {
   }
 
   private async selectDb(
-    db: number | undefined = this.options.db,
+    db: number | undefined = this.options.db
   ): Promise<void> {
     if (!db) throw new Error("The database index is undefined.");
     await this.sendCommand("SELECT", [db]);
@@ -106,21 +107,18 @@ export class RedisConnection implements Connection {
 
   async sendCommand(
     command: string,
-    args?: Array<RedisValue>,
+    args?: Array<RedisValue>
   ): Promise<RedisReply> {
     try {
       const reply = await sendCommand(
         this.writer,
         this.reader,
         command,
-        args ?? kEmptyRedisArgs,
+        args ?? kEmptyRedisArgs
       );
       return reply;
     } catch (error) {
-      if (
-        !isRetriableError(error) ||
-        this.isManuallyClosedByUser()
-      ) {
+      if (!isRetriableError(error) || this.isManuallyClosedByUser()) {
         throw error;
       }
 
@@ -134,11 +132,12 @@ export class RedisConnection implements Connection {
             this.writer,
             this.reader,
             command,
-            args ?? kEmptyRedisArgs,
+            args ?? kEmptyRedisArgs
           );
 
           return reply;
-        } catch { // TODO: use `AggregateError`?
+        } catch {
+          // TODO: use `AggregateError`?
           const backoff = this.backoff(i);
           await delay(backoff);
         }
@@ -157,10 +156,12 @@ export class RedisConnection implements Connection {
 
   async #connect(retryCount: number) {
     try {
-      const dialOpts: Deno.ConnectOptions = {
+      const dialOpts = {
+        ...(this.options?.tlsOptions || {}),
         hostname: this.hostname,
         port: parsePortLike(this.port),
       };
+
       const conn: Deno.Conn = this.options?.tls
         ? await Deno.connectTls(dialOpts)
         : await Deno.connect(dialOpts);
@@ -184,7 +185,7 @@ export class RedisConnection implements Connection {
       }
     } catch (error) {
       if (error instanceof AuthenticationError) {
-        throw (error.cause ?? error);
+        throw error.cause ?? error;
       }
 
       const backoff = this.backoff(retryCount);
@@ -214,7 +215,8 @@ export class RedisConnection implements Connection {
     try {
       await this.sendCommand("PING");
       this._isConnected = true;
-    } catch (_error) { // TODO: Maybe we should log this error.
+    } catch (_error) {
+      // TODO: Maybe we should log this error.
       this.close();
       await this.connect();
       await this.sendCommand("PING");
